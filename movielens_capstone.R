@@ -79,3 +79,24 @@ edx %>% separate_rows(genres, sep = "\\|") %>%
   summarize(count = n()) %>%
   arrange(desc(count))
 
+
+#Q6
+#Which movie has the greatest number of ratings?
+edx %>% group_by(movieId, title) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count))
+
+# Q7
+#What are the five most given ratings in order from most to least?
+
+edx %>% group_by(rating) %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n)) %>% 
+  top_n(5, n)
+
+
+edx %>%
+  group_by(rating) %>%
+  summarize(count = n()) %>%
+  ggplot(aes(x = rating, y = count)) +
+  geom_line()
