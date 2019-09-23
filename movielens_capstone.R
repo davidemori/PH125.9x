@@ -46,3 +46,36 @@ removed <- anti_join(temp, validation)
 edx <- rbind(edx, removed)
 
 rm(dl, ratings, movies, test_index, temp, movielens, removed)
+
+
+# START CAPSTONE
+# Exploring datasets
+
+#Q1
+##How many rows and columns are there in the edx dataset?
+cat("Number of Rows:", dim(edx)[1])
+cat("Number of Columns:", dim(edx)[2])
+
+#Q2
+#How many zeros were given as ratings in the edx dataset?
+cat("There are", sum(edx$rating==0), "zeroes" )
+
+#How many threes were given as ratings in the edx dataset?
+cat("There are", sum(edx$rating==3), "threes" )
+
+#Q3
+#How many different movies are in the edx dataset?
+cat("There are", n_distinct(edx$movieId), "different movies" )
+
+#Q4
+#How many different users are in the edx dataset?
+cat("There are", n_distinct(edx$userId), "different users" )
+
+
+#Q5
+#How many movie ratings are in each of the following genres in the edx dataset?
+edx %>% separate_rows(genres, sep = "\\|") %>%
+  group_by(genres) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count))
+
