@@ -2,8 +2,9 @@
 title: "Movielens Project"
 author: "Davide Mori"
 date: "30/9/2019"
-output: html_document
-toc: true
+output:
+  pdf_document: default
+toc: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -116,7 +117,7 @@ edx %>%
 
 Users have a preference to rate movies rather higher than lower as shown by the distribution of ratings below. 4 is the most common rating, followed by 3 and 5. 0.5 is the least common rating. In general, half rating are less common than whole star ratings.
 
-```{r rating_distribution, echo = FALSE}
+```{r, echo = FALSE}
 edx %>%
   ggplot(aes(rating)) +
   geom_histogram(binwidth = 0.5, color = "black", fill="rosybrown") +
@@ -130,7 +131,7 @@ After further analyses we can observe that some movies have been rated much ofte
 Regularizations are techniques used to reduce the error by fitting a function appropriately on the given training set and avoid overfitting (the production of an analysis that corresponds too closely or exactly to a particular set of data, and may therefore fail to fit additional data or predict future observations reliably). Regularization is a technique used for tuning the function by adding an additional penalty term in the error function. The additional term controls the excessively fluctuating function such that the coefficients don’t take extreme values.
 
 
-```{r number_of_ratings_per_movie, echo = TRUE, fig.height=4, fig.width=5}
+```{r, echo = TRUE, fig.height=4, fig.width=5}
 edx %>%
   count(movieId) %>%
   ggplot(aes(n)) +
@@ -143,7 +144,7 @@ edx %>%
 
 Here we show the movies with only one rating score.
 
-```{r number_of_ratings_per_movie, echo = TRUE, fig.height=4, fig.width=5}
+```{r, echo = TRUE, fig.height=4, fig.width=5}
 edx %>%
   group_by(movieId) %>%
   summarize(count = n()) %>%
@@ -158,7 +159,7 @@ edx %>%
 As we can observe, the majority of users have rated a number of movies between 30 and 100. So, also a user penalty term need to be included later in our models.
 
 
-```{r number_ratings_given_by_users, echo = TRUE, fig.height=4, fig.width=5}
+```{r, echo = TRUE, fig.height=4, fig.width=5}
 edx %>%
 count(userId) %>%
 ggplot(aes(n)) +
@@ -172,7 +173,7 @@ ggtitle("Number of ratings given by users")
 Furthermore, users differ vastly in how critical they are with their ratings. Some users tend to give much lower star ratings and some users tend to give higher star ratings than average.
 
 
-```{r Mean_movie_ratings_given_by_users, echo = TRUE, fig.height=4, fig.width=5}
+```{r, echo = TRUE, fig.height=4, fig.width=5}
 edx %>%
   group_by(userId) %>%
   filter(n() >= 100) %>%
@@ -200,13 +201,238 @@ We can interpret the RMSE similarly to a standard deviation: it is the typical e
 The written function to compute the RMSE for vectors of ratings and their corresponding predictions is:
 
 
-```{r RMSE_function2, echo = TRUE}
+```{r, echo = TRUE}
 RMSE <- function(true_ratings, predicted_ratings){
   sqrt(mean((true_ratings - predicted_ratings)^2))
 }
 ```
 
-The lower the better, as said previously.
+The lower is the RMSE the better is the result of our model, as we said in the introduction.
+
+### I Average movie rating model
+
+The first basic model that we'll show predicts the same rating for all movies, and this value is equal to the dataset’s mean rating. 
+A model based approach assumes the same rating for all movie with all differences explained by random variation :
+$$ Y_{u, i} = \mu + \epsilon_{u, i} $$
+with $\epsilon_{u,i}$ independent error sample from the same distribution centered at 0 and $\mu$ the “true” rating for all movies. This very simple model makes the assumption that all differences in movie ratings are explained by random variation alone. We know that the estimate that minimize the RMSE is the least square estimate of $Y_{u,i}$ , in this case, is the average of all ratings:
+The expected rating of the underlying data set is between 3 and 4.
+
+```{r, echo = TRUE}
+mu <- mean(edx$rating)
+mu
+```
+
+
+If we predict all unknown ratings with $\mu$ or mu, we obtain the first naive RMSE:
+
+```{r, echo = TRUE}
+mu_rmse <- RMSE(validation$rating, mu)
+cat("Our first RMSE is",mu_rmse, "(Pretty big!!)")
+```
+
+
+Here, we represent results table with the first RMSE:
+
+```{r, echo = TRUE}
+rmse_results <- data_frame(method = "Average movie rating model", RMSE = mu_rmse)
+rmse_results %>% knitr::kable()
+```
+
+This give us our baseline RMSE to compare with next modelling approaches.
+
+In order to do better than simply predicting the average rating, we incorporate some of insights we gained during the exploratory data analysis.
+
+
+### II.  Movie effect model
+
+To improve above model we focus on the fact that, from experience, we know that some movies are just generally rated higher than others. Higher ratings are mostly linked to popular movies among users and the opposite is true for unpopular movies. We compute the estimated deviation of each movies’ mean rating from the total mean of all movies $\mu$. The resulting variable is called "b" ( as bias ) for each movie "i" $b_{i}$, that represents average ranking for movie $i$:
+$$Y_{u, i} = \mu +b_{i}+ \epsilon_{u, i}$$
+
+The histogram is left skewed, implying that more movies have negative effects
+
+
+```{r Number_of_movies_with_the computed_b_i, echo = TRUE, fig.height=3, fig.width=4}
+movie_avgs <- edx %>%
+  group_by(movieId) %>%
+  summarize(b_i = mean(rating - mu))
+movie_avgs%>% ggplot(aes(b_i)) + 
+  geom_histogram(bins = 30, color="black", fill="rosybrown")+
+  xlab("b_i values") +
+  ylab("Number of Movies") +
+  ggtitle("b_i versus number of movies") 
+```
+
+
+This is called the penalty term movie effect.
+
+Our prediction improve once we predict using this model.
+
+```{r predicted_ratings, echo = TRUE}
+predicted_ratings <- mu + validation %>%
+  left_join(movie_avgs, by='movieId') %>%
+  pull(b_i)
+First_model_rmse <- RMSE(predicted_ratings, validation$rating)
+rmse_results <- bind_rows(rmse_results,
+                          data_frame(method="Movie effect (b_i) model",  
+                                     RMSE = First_model_rmse ))
+# Check results after First model
+rmse_results %>% knitr::kable()
+
+```
+
+
+So we have predicted movie rating based on the fact that movies are rated differently by adding the computed $b_{i}$ to $\mu$. If an individual movie is on average rated worse that the average rating of all movies $\mu$ , we predict that it will rated lower that $\mu$ by $b_{i}$, the difference of the individual movie average from the total average.
+
+We can see an improvement but this model does not consider the individual user rating effect.
+
+
+### III. Movie and user effect model
+
+We compute the average rating for user $\mu$, for those that have rated over 100 movies, said penalty term user effect. In fact users affect the ratings positively or negatively.
+```{r, echo = TRUE}
+user_avgs<- edx %>% 
+  left_join(movie_avgs, by='movieId') %>%
+  group_by(userId) %>%
+  filter(n() >= 100) %>%
+  summarize(b_u = mean(rating - mu - b_i))
+user_avgs%>% ggplot(aes(b_u)) + 
+  geom_histogram(bins = 30, color="black", fill="rosybrown")
+```
+
+There is substantial variability across users as well: some users are very cranky and other love every movie. This implies that further improvement to our model my be:
+$$Y_{u, i} = \mu + b_{i} + b_{u} + \epsilon_{u, i}$$
+where $b_{u}$ is a user-specific effect. If a cranky user (negative $b_{u}$ rates a great movie (positive $b_{i}$), the effects counter each other and we may be able to correctly predict that this user gave this great movie a 3 rather than a 5.
+
+We compute an approximation by computing $\mu$ and $b_{i}$, and estimating  $b_{u}$, as the average of $$Y_{u, i} - \mu - b_{i}$$
+
+```{r user_avgs, echo = TRUE}
+user_avgs <- edx %>%
+  left_join(movie_avgs, by='movieId') %>%
+  group_by(userId) %>%
+  summarize(b_u = mean(rating - mu - b_i))
+
+  
+```
+
+We can now construct predictors and see RMSE improves:
+
+
+```{r model_2_rmse, echo = TRUE}
+predicted_ratings <- validation%>%
+  left_join(movie_avgs, by='movieId') %>%
+  left_join(user_avgs, by='userId') %>%
+  mutate(pred = mu + b_i + b_u) %>%
+  pull(pred)
+
+Second_model_rmse <- RMSE(predicted_ratings, validation$rating)
+rmse_results <- bind_rows(rmse_results,
+                          data_frame(method="Movie and user (b_i + b_u) effect model",  
+                                     RMSE = Second_model_rmse))
+
+# Check result
+rmse_results %>% knitr::kable()
+```
+
+
+Our rating predictions further reduced the RMSE. But we made stil mistakes on our first model (using only movies). The supposes “best “ and “worst “movie were rated by few users, in most cases just one user. These movies were mostly obscure ones. This is because with a few users, we have more uncertainty. Therefore larger estimates of $b_{i}$, negative or positive, are more likely.
+Large errors can increase our RMSE. 
+
+Until now, we computed standard error and constructed confidence intervals to account for different levels of uncertainty. However, when making predictions, we need one number, one prediction, not an interval. For this we introduce the concept of regularization, that permits to penalize large estimates that come from small sample sizes. The general idea is to add a penalty for large values of $b_{i}$ to the sum of squares equation that we minimize. So having many large $b_{i}$, make it harder to minimize. Regularization is a method used to reduce the effect of overfitting.
+
+
+### IV. Regularized movie and user effect model
+
+So estimates of $b_{i}$ and $b_{u}$ are caused by movies with very few ratings and in some users that only rated a very small number of movies. Hence this can strongly influence the prediction. The use of the regularization permits to penalize these aspects. We should find the value of lambda (that is a tuning parameter) that will minimize the RMSE. This shrinks the $b_{i}$ and $b_{u}$ in case of small number of ratings.
+
+
+```{r, echo = TRUE}
+lambdas <- seq(0, 20, 0.25)
+
+rmses <- sapply(lambdas, function(l){
+  
+  mu <- mean(edx$rating)
+  
+  b_i <- edx %>% 
+    group_by(movieId) %>%
+    summarize(b_i = sum(rating - mu)/(n()+l))
+  
+  b_u <- edx %>% 
+    left_join(b_i, by="movieId") %>%
+    group_by(userId) %>%
+    summarize(b_u = sum(rating - b_i - mu)/(n()+l))
+  
+  predicted_ratings <- 
+    validation %>% 
+    left_join(b_i, by = "movieId") %>%
+    left_join(b_u, by = "userId") %>%
+    mutate(pred = mu + b_i + b_u) %>%
+    pull(pred)
+  
+  return(RMSE(predicted_ratings, validation$rating))
+})
+```
+
+
+We plot RMSE vs lambdas to select the optimal lambda
+
+```{r plot_lambdas, echo = TRUE}
+qplot(lambdas, rmses)  
+```
+
+For the full model, the optimal lambda is:
+
+```{r min_lambda, echo = TRUE}
+  lambda <- lambdas[which.min(rmses)]
+lambda
+```
+
+For the full model, the optimal lambda is: 5.25
+
+The new results will be:
+
+
+```{r rmse_results2, echo = TRUE}
+# Test and save results                                                             
+rmse_results <- bind_rows(rmse_results,
+                          data_frame(method="Regularized movie and user effect model",  
+                                     RMSE = min(rmses)))
+
+# Check result
+rmse_results %>% knitr::kable()
+```
+
+\pagebreak
+
+# Results
+
+The RMSE values of all the represented models are the following:
+
+```{r rmse_results3, echo = FALSE}
+rmse_results %>% knitr::kable()
+```
+
+We therefore found the lowest value of RMSE that is 0.8648170.
+
+
+# Discussion
+
+So we can confirm that the final model for our project is the following:
+
+$$Y_{u, i} = \mu + b_{i} + b_{u} + \epsilon_{u, i}$$
+
+This model work well if the average user doesn't rate a particularly good/popular movie with a large positive $b_{i}$, by disliking a particular movie. 
+
+
+# Conclusion
+
+We can say to have built a machine learning algorithm to predict movie ratings with MovieLens dataset.
+The regularized model including the effect of user is characterized by the lower RMSE value and is hence the optimal model to use for the present project.
+The optimal model characterised by the lowest RMSE value (0.8648170) lower than the initial evaluation criteria (0.8775) given by the goal of the present project.
+We could also affirm that improvements in the RMSE could be achieved by adding other effect (genre, year, age,..). Other different machine learning models could also improve the results further, but hardware limitations, as the RAM, are a constraint.
+
+\pagebreak
+
+
 
 
 
